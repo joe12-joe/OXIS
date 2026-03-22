@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D JS Car Game</title>
+    <style> body { margin: 0; overflow: hidden; } </style>
+</head>
+<body>
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
+        import * as CANNON from 'https://cdn.skypack.dev/cannon-es';
+
+        // 1. SCENE SETUP
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // 2. PHYSICS WORLD
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0); // Real world gravity!
+
+        // 3. THE FLOOR
+        const groundGeo = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
+        groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+        world.addBody(groundBody);
+
+        // 4. THE CAR (A simple box for now)
+        const carGeo = new THREE.BoxGeometry(2, 1, 4);
+        const carMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const carMesh = new THREE.Mesh(carGeo, carMat);
+        scene.add(carMesh);
+
+        const carBody = new CANNON.Body({
+            mass: 1500, // 1500kg
+            shape: new CANNON.Box(new CANNON.Vec3(1, 0.5, 2))
+        });
+        carBody.position.set(0, 2, 0);
+        world.addBody(carBody);
+
+        // LIGHTS
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(10, 20, 10);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040));
+
+        camera.position.set(0, 5, 10);
+
+        // 5. ANIMATION LOOP
+        function animate() {
+            requestAnimationFrame(animate);
+            world.step(1/60); // Update physics
+
+            // Sync visual mesh with physics body
+            carMesh.position.copy(carBody.position);
+            carMesh.quaternion.copy(carBody.quaternion);
+
+            // Basic Follow Camera
+            camera.position.lerp(new THREE.Vector3(carBody.position.x, carBody.position.y + 4, carBody.position.z + 8), 0.1);
+            camera.lookAt(carBody.position);
+
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
