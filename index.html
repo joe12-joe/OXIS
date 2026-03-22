@@ -1,73 +1,231 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>3D JS Car Game</title>
-    <style> body { margin: 0; overflow: hidden; } </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BMW 3D Multiplayer Car Game — Real Track (ERROR FIXED)</title>
+  <style>
+    body { margin:0; overflow:hidden; font-family:Arial,sans-serif; background:#000; }
+    canvas { display:block; }
+    #ui { position:absolute; top:10px; left:10px; color:white; background:rgba(0,0,0,0.6); padding:12px 20px; border-radius:8px; font-size:1.4em; z-index:100; }
+    #multi { position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.8); padding:15px; border-radius:12px; color:white; text-align:center; z-index:100; }
+    #instructions { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.6); padding:10px 25px; border-radius:10px; color:white; text-align:center; font-size:1.05em; z-index:100; }
+    button { padding:10px 18px; margin:5px; background:#ff3333; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; }
+    button:hover { background:#ff5555; }
+    input { padding:10px; width:220px; margin:5px; border-radius:6px; font-size:1em; }
+    #loadError { 
+      position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); 
+      background:#f00; color:#fff; padding:30px 40px; border-radius:15px; 
+      font-size:22px; text-align:center; z-index:9999; box-shadow:0 0 40px red; 
+      display:none; max-width:90%;
+    }
+  </style>
 </head>
 <body>
-    <script type="module">
-        import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
-        import * as CANNON from 'https://cdn.skypack.dev/cannon-es';
 
-        // 1. SCENE SETUP
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
+<div id="ui">Speed: <span id="speed">0</span> km/h</div>
 
-        // 2. PHYSICS WORLD
-        const world = new CANNON.World();
-        world.gravity.set(0, -9.82, 0); // Real world gravity!
+<div id="multi">
+  <button id="hostBtn">🎮 Create Room (Host)</button><br><br>
+  <div id="myIdDisplay" style="display:none;">
+    Your Room ID:<br><strong id="myId" style="font-size:1.4em;color:#0f0;"></strong><br>
+    <small>Send this code to your friend</small>
+  </div>
+  <input id="joinInput" placeholder="Paste friend's Room ID" />
+  <button id="joinBtn">Join Room</button>
+</div>
 
-        // 3. THE FLOOR
-        const groundGeo = new THREE.PlaneGeometry(100, 100);
-        const groundMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
-        const ground = new THREE.Mesh(groundGeo, groundMat);
-        ground.rotation.x = -Math.PI / 2;
-        scene.add(ground);
+<div id="instructions">
+  W / ↑ = Accelerate &nbsp;&nbsp; S / ↓ = Brake/Reverse &nbsp;&nbsp; A/D or ←→ = Steer<br>
+  <strong>Real BMW-style car • Real track • Real multiplayer</strong>
+</div>
 
-        const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
-        groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-        world.addBody(groundBody);
+<div id="loadError">
+  ❌ Three.js could not load.<br><br>
+  Please check:<br>
+  • Internet connection<br>
+  • Disable adblocker / VPN / firewall<br>
+  • Try refreshing the page<br><br>
+  <button onclick="location.reload()">Refresh Now</button>
+</div>
 
-        // 4. THE CAR (A simple box for now)
-        const carGeo = new THREE.BoxGeometry(2, 1, 4);
-        const carMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-        const carMesh = new THREE.Mesh(carGeo, carMat);
-        scene.add(carMesh);
+<!-- MOST RELIABLE CDN RIGHT NOW (March 2026) - jsDelivr auto-latest -->
+<script src="https://cdn.jsdelivr.net/npm/three/build/three.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
-        const carBody = new CANNON.Body({
-            mass: 1500, // 1500kg
-            shape: new CANNON.Box(new CANNON.Vec3(1, 0.5, 2))
-        });
-        carBody.position.set(0, 2, 0);
-        world.addBody(carBody);
+<script>
+// IMPROVED SAFETY CHECK
+if (typeof THREE === 'undefined') {
+  document.getElementById('loadError').style.display = 'block';
+} else {
+  console.log("✅ THREE.js loaded successfully from jsDelivr");
+}
 
-        // LIGHTS
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(10, 20, 10);
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0x404040));
+// ====================== SCENE ======================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x88aaff);
+scene.fog = new THREE.Fog(0x88aaff, 80, 450);
 
-        camera.position.set(0, 5, 10);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
 
-        // 5. ANIMATION LOOP
-        function animate() {
-            requestAnimationFrame(animate);
-            world.step(1/60); // Update physics
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+sun.position.set(60, 120, 40);
+sun.castShadow = true;
+scene.add(sun);
 
-            // Sync visual mesh with physics body
-            carMesh.position.copy(carBody.position);
-            carMesh.quaternion.copy(carBody.quaternion);
+// ====================== REAL TRACK ======================
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(500,500), new THREE.MeshStandardMaterial({color:0x222222}));
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
 
-            // Basic Follow Camera
-            camera.position.lerp(new THREE.Vector3(carBody.position.x, carBody.position.y + 4, carBody.position.z + 8), 0.1);
-            camera.lookAt(carBody.position);
+for(let i=-8;i<=8;i++){
+  const line = new THREE.Mesh(new THREE.BoxGeometry(1.8,0.1,18), new THREE.MeshStandardMaterial({color:0xffffff}));
+  line.position.set(i*18,0.06,0);
+  scene.add(line);
+}
 
-            renderer.render(scene, camera);
-        }
-        animate();
-    </script>
+function wall(x,z,rot,len=120){
+  const w = new THREE.Mesh(new THREE.BoxGeometry(4,6,len), new THREE.MeshStandardMaterial({color:0x444444}));
+  w.position.set(x,3,z); w.rotation.y=rot;
+  w.castShadow=w.receiveShadow=true;
+  scene.add(w);
+}
+wall(0,-140,0); wall(0,140,0);
+wall(-140,0,Math.PI/2); wall(140,0,Math.PI/2);
+
+function tree(x,z){
+  const t = new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.5,6), new THREE.MeshStandardMaterial({color:0x8B4513}));
+  t.position.set(x,3,z);
+  const l = new THREE.Mesh(new THREE.ConeGeometry(6,9), new THREE.MeshStandardMaterial({color:0x006600}));
+  l.position.set(x,9,z);
+  scene.add(t,l);
+}
+tree(-110,-110); tree(110,-110); tree(-110,110); tree(110,110);
+
+// ====================== BMW-STYLE CAR ======================
+let localCar, localWheels = [], remoteCar = null;
+
+function createCar(color){
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(5,2.2,12.5), new THREE.MeshStandardMaterial({color}));
+  body.position.y = 1.4;
+  group.add(body);
+
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(4.1,1.7,6.5), new THREE.MeshStandardMaterial({color:0x111133}));
+  roof.position.set(0,3.1,-1.2);
+  group.add(roof);
+
+  const grille = new THREE.Mesh(new THREE.BoxGeometry(3.8,1.4,0.4), new THREE.MeshStandardMaterial({color:0x111111}));
+  grille.position.set(0,1.8,5.9); group.add(grille);
+
+  const spoiler = new THREE.Mesh(new THREE.BoxGeometry(4.8,0.3,1.4), new THREE.MeshStandardMaterial({color}));
+  spoiler.position.set(0,3.8,-6.1); spoiler.rotation.x=0.25; group.add(spoiler);
+
+  const wheels = [];
+  const makeWheel = (x,z) => {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(1.15,1.15,0.7,32), new THREE.MeshStandardMaterial({color:0x111111}));
+    w.rotation.z = Math.PI/2; w.position.set(x,1.15,z);
+    wheels.push(w); return w;
+  };
+  group.add(makeWheel(-2.4,4.2), makeWheel(2.4,4.2), makeWheel(-2.4,-4.2), makeWheel(2.4,-4.2));
+
+  group.castShadow = true;
+  return {car: group, wheels};
+}
+
+const localData = createCar(0xff2222);
+localCar = localData.car;
+localWheels = localData.wheels;
+scene.add(localCar);
+
+const remoteData = createCar(0x4488ff);
+remoteCar = remoteData.car;
+scene.add(remoteCar);
+
+// ====================== MULTIPLAYER ======================
+let peer = null, conn = null;
+
+document.getElementById('hostBtn').onclick = () => {
+  peer = new Peer();
+  peer.on('open', id => {
+    document.getElementById('myId').textContent = id;
+    document.getElementById('myIdDisplay').style.display = 'block';
+  });
+  peer.on('connection', c => { conn = c; setupConn(); });
+};
+
+document.getElementById('joinBtn').onclick = () => {
+  const id = document.getElementById('joinInput').value.trim();
+  if(!id) return alert("Paste Room ID!");
+  peer = new Peer();
+  conn = peer.connect(id);
+  setupConn();
+};
+
+function setupConn(){
+  conn.on('open', () => console.log("✅ Connected!"));
+  conn.on('data', d => {
+    if(remoteCar){ remoteCar.position.set(d.x,d.y,d.z); remoteCar.rotation.y = d.rot; }
+  });
+}
+
+setInterval(() => {
+  if(conn && conn.open && localCar){
+    conn.send({x:localCar.position.x, y:localCar.position.y, z:localCar.position.z, rot:localCar.rotation.y});
+  }
+}, 30);
+
+// ====================== GAME LOOP ======================
+let speed = 0;
+const maxSpeed = 0.9, accel = 0.009, brake = 0.019, drag = 0.975, turnSpeed = 2.8;
+const keys = {};
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(!localCar) return;
+
+  const forward = keys['w']||keys['arrowup'];
+  const backward = keys['s']||keys['arrowdown'];
+  const left = keys['a']||keys['arrowleft'];
+  const right = keys['d']||keys['arrowright'];
+
+  if(forward) speed += accel;
+  if(backward) speed -= brake;
+  if(!forward && !backward) speed *= drag;
+  speed = Math.max(-maxSpeed*0.45, Math.min(maxSpeed, speed));
+
+  const turn = (right?1:0)-(left?1:0);
+  if(Math.abs(speed)>0.02) localCar.rotation.y -= turn * turnSpeed * 0.016 * (speed/maxSpeed);
+
+  const dir = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0), localCar.rotation.y);
+  localCar.position.addScaledVector(dir, speed);
+
+  localWheels.forEach(w => w.rotation.x += speed*15);
+
+  const offset = new THREE.Vector3(0,9,26).applyAxisAngle(new THREE.Vector3(0,1,0), localCar.rotation.y);
+  camera.position.lerp(localCar.position.clone().add(offset), 0.13);
+  camera.lookAt(localCar.position.x, localCar.position.y+4, localCar.position.z);
+
+  document.getElementById('speed').textContent = Math.abs(Math.round(speed*160));
+
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
 </body>
 </html>
